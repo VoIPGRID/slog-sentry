@@ -78,7 +78,11 @@ func (s *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
 			if !slices.Contains(slogDefaultKeys, attr.Key) {
 				slogContext[attr.Key] = attr.Value.String()
 			} else if attr.Key == shortErrKey || attr.Key == longErrKey {
-				err = attr.Value.Any().(error)
+				var ok bool
+				err, ok = attr.Value.Any().(error)
+				if !ok {
+					slogContext[attr.Key] = attr.Value.String()
+				}
 			}
 			return true
 		})
