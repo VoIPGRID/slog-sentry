@@ -1,3 +1,10 @@
+// Package slogsentry provides a slog Handler wrapper for the Sentry-go library.
+//
+// Slog attributes are passed on to Sentry as context values.
+// Some attribute keys are special. Attributes with a key prefixed with "tag_" are
+// not stored in the context, but in the tags part of the Sentry event.
+// The value of an attribute with the name "err" or "error" is included in the event
+// message. Attributes with a name equal to a slog default key are ignored.
 package slogsentry
 
 import (
@@ -5,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 
 	"github.com/getsentry/sentry-go"
 )
@@ -12,6 +20,10 @@ import (
 const (
 	shortErrKey = "err"
 	longErrKey  = "error"
+
+	// tagAttrPrefix defines the prefix slog attributes need to be detected as a value for
+	// the Sentry tags map.
+	tagAttrPrefix = "tag_"
 )
 
 var slogDefaultKeys = []string{slog.TimeKey, slog.LevelKey, slog.SourceKey, slog.MessageKey, shortErrKey, longErrKey}
@@ -79,9 +91,12 @@ func (s *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
 
 		var err error
 		slogContext := map[string]any{}
+		tags := map[string]string{}
 
 		handleAttr := func(attr slog.Attr) {
-			if !slices.Contains(slogDefaultKeys, attr.Key) {
+			if strings.HasPrefix(attr.Key, tagAttrPrefix) {
+				tags[attr.Key] = attr.Value.String()
+			} else if !slices.Contains(slogDefaultKeys, attr.Key) {
 				slogContext[attr.Key] = attr.Value.String()
 			} else if attr.Key == shortErrKey || attr.Key == longErrKey {
 				var ok bool
@@ -104,6 +119,10 @@ func (s *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
 		hub.WithScope(func(scope *sentry.Scope) {
 			if len(slogContext) > 0 {
 				scope.SetContext("slog", slogContext)
+			}
+
+			if len(tags) > 0 {
+				scope.SetTags(tags)
 			}
 
 			switch record.Level {
