@@ -61,10 +61,6 @@ func NewSentryHandler(
 }
 
 func NewSentryHandlerWithStoredAttrs(handler slog.Handler, levels []slog.Level, storedAttrs []slog.Attr) *SentryHandler {
-	newHandler := NewSentryHandler(handler, levels)
-	newHandler.storedAttrs = storedAttrs
-
-	return newHandler
 }
 
 // Enabled reports whether the handler handles records at the given level.
@@ -127,10 +123,10 @@ func (s *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
 
 // WithAttrs returns a new SentryHandler with the given attributes stored.
 func (s *SentryHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return NewSentryHandlerWithStoredAttrs(
-		s.Handler.WithAttrs(attrs),
-		s.levels,
-		attrs)
+	newHandler := NewSentryHandler(s.Handler.WithAttrs(attrs), s.levels)
+	newHandler.storedAttrs = attrs
+
+	return newHandler
 }
 
 // WithGroup returns a new SentryHandler whose group consists.
