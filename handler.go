@@ -60,9 +60,6 @@ func NewSentryHandler(
 	}
 }
 
-func NewSentryHandlerWithStoredAttrs(handler slog.Handler, levels []slog.Level, storedAttrs []slog.Attr) *SentryHandler {
-}
-
 // Enabled reports whether the handler handles records at the given level.
 func (s *SentryHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	return s.Handler.Enabled(ctx, level)
