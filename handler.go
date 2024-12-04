@@ -42,6 +42,10 @@ func (e SlogError) Unwrap() error {
 type SentryHandler struct {
 	slog.Handler
 	levels []slog.Level
+
+	// storedAttrs allow to configure logging attributes which are always included in the context
+	// of events reported to Sentry.
+	storedAttrs []slog.Attr
 }
 
 // NewSentryHandler creates a SentryHandler that writes to w,
@@ -54,6 +58,13 @@ func NewSentryHandler(
 		Handler: handler,
 		levels:  levels,
 	}
+}
+
+func NewSentryHandlerWithStoredAttrs(handler slog.Handler, levels []slog.Level, storedAttrs []slog.Attr) *SentryHandler {
+	newHandler := NewSentryHandler(handler, levels)
+	newHandler.storedAttrs = storedAttrs
+
+	return newHandler
 }
 
 // Enabled reports whether the handler handles records at the given level.
@@ -72,9 +83,11 @@ func (s *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
 		if hub == nil {
 			return fmt.Errorf("sentry: hub is nil")
 		}
+
 		var err error
 		slogContext := map[string]any{}
-		record.Attrs(func(attr slog.Attr) bool {
+
+		handleAttr := func(attr slog.Attr) {
 			if !slices.Contains(slogDefaultKeys, attr.Key) {
 				slogContext[attr.Key] = attr.Value.String()
 			} else if attr.Key == shortErrKey || attr.Key == longErrKey {
@@ -84,6 +97,14 @@ func (s *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
 					slogContext[attr.Key] = attr.Value.String()
 				}
 			}
+		}
+
+		for _, attr := range s.storedAttrs {
+			handleAttr(attr)
+		}
+
+		record.Attrs(func(attr slog.Attr) bool {
+			handleAttr(attr)
 			return true
 		})
 
@@ -97,7 +118,6 @@ func (s *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
 				sentry.CaptureException(SlogError{msg: record.Message, err: err})
 			case slog.LevelDebug, slog.LevelInfo, slog.LevelWarn:
 				sentry.CaptureMessage(record.Message)
-
 			}
 		})
 	}
@@ -105,9 +125,12 @@ func (s *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
 	return s.Handler.Handle(ctx, record)
 }
 
-// WithAttrs returns a new SentryHandler whose attributes consists.
+// WithAttrs returns a new SentryHandler with the given attributes stored.
 func (s *SentryHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return NewSentryHandler(s.Handler.WithAttrs(attrs), s.levels)
+	return NewSentryHandlerWithStoredAttrs(
+		s.Handler.WithAttrs(attrs),
+		s.levels,
+		attrs)
 }
 
 // WithGroup returns a new SentryHandler whose group consists.
